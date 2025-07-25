@@ -1,0 +1,63 @@
+---
+- hosts: demo
+  tasks:
+    - name: Create directory for JDK
+      file:
+        state: directory
+        path: "{{ item }}"
+      with_items:
+        - /home/ec2-user/jdk21
+        - /home/ec2-user/tomcat
+    - name: Install JDK
+      unarchive:
+        src: https://builds.openlogic.com/downloadJDK/openlogic-openjdk/21.0.8+9/openlogic-openjdk-21.0.8+9-linux-x64.tar.gz
+        dest: /home/ec2-user/jdk21/
+        remote_src: yes
+        extra_opts: --strip-components=1
+    - name: Set JAVA_HOME environment variable
+      lineinfile:
+        path: /home/ec2-user/.bash_profile
+        line: 'export JAVA_HOME=/home/ec2-user/jdk21'
+        create: yes
+    - name: Set PATH environment variable
+      lineinfile:
+        path: /home/ec2-user/.bash_profile
+        line: 'export PATH=$PATH:$JAVA_HOME/bin'
+        create: yes
+    - name: Set PATH environment variable for Tomcat
+      lineinfile:
+        path: /home/ec2-user/.bash_profile
+        line: 'export CATALINA_HOME=/home/ec2-user/tomcat'
+        create: yes
+    - name: Install Tomcat
+      unarchive:
+        src: https://dlcdn.apache.org/tomcat/tomcat-11/v11.0.9/bin/apache-tomcat-11.0.9.tar.gz
+        dest: /home/ec2-user/tomcat
+        remote_src: yes
+        extra_opts: --strip-components=1
+
+    - name: Start Tomcat
+      shell: nohup ./catalina.sh start >> ../tomcat.log &
+      args:
+        chdir: /home/ec2-user/tomcat/bin
+      environment:
+        JAVA_HOME: /home/ec2-user/jdk21
+        CATALINA_HOME: /home/ec2-user/tomcat
+      async: 10
+      poll: 2
+
+    - name: Wait for Tomcat to start
+      wait_for:
+        port: 8080
+        delay: 10
+        timeout: 60
+      register: wait_result
+
+    - name: Check if Tomcat started successfully
+      fail: 
+        msg: "Tomcat did not start successfully"
+      when: wait_result is failed
+
+    - name: Display Tomcat status
+      debug:
+        msg: "Tomcat is running on port 8080"
